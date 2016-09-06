@@ -38,6 +38,29 @@ class ExportCsvContentHandler extends ExportHandler
 
     public $file_path = '';
 
+
+    const CSV_CHARSET_UTF8           = 'UTF-8';             //другой
+    const CSV_CHARSET_WINDOWS1251    = 'windows-1251';             //другой
+
+    /**
+     * @var string
+     */
+    public $charset = self::CSV_CHARSET_UTF8;
+
+
+    /**
+     * Доступные кодировки
+     * @return array
+     */
+    static public function getCsvCharsets()
+    {
+        return [
+            self::CSV_CHARSET_UTF8              => self::CSV_CHARSET_UTF8,
+            self::CSV_CHARSET_WINDOWS1251       => self::CSV_CHARSET_WINDOWS1251,
+        ];
+    }
+
+
     public function init()
     {
         $this->name = \Yii::t('skeeks/exportCsvContent', '[CSV] Export content items');
@@ -100,6 +123,8 @@ class ExportCsvContentHandler extends ExportHandler
             ['content_id' , 'required'],
             ['content_id' , 'integer'],
 
+            ['charset' , 'string'],
+
             [['matching'], 'safe'],
             [['matching'], function($attribute) {
                 if (!in_array('element.name', $this->$attribute))
@@ -115,6 +140,7 @@ class ExportCsvContentHandler extends ExportHandler
         return ArrayHelper::merge(parent::attributeLabels(), [
             'content_id'        => \Yii::t('skeeks/importCsvContent', 'Контент'),
             'matching'          => \Yii::t('skeeks/importCsvContent', 'Preview content and configuration compliance'),
+            'charset'          => \Yii::t('skeeks/importCsvContent', 'Кодировка'),
         ]);
     }
 
@@ -124,6 +150,12 @@ class ExportCsvContentHandler extends ExportHandler
     public function renderConfigForm(ActiveForm $form)
     {
         parent::renderConfigForm($form);
+
+        echo $form->field($this, 'charset')->listBox(
+            $this->getCsvCharsets(), [
+                'size' => 1,
+                'data-form-reload' => 'true'
+            ]);
 
         echo $form->field($this, 'content_id')->listBox(
             array_merge(['' => ' - '], CmsContent::getDataForSelect()), [
@@ -195,6 +227,18 @@ class ExportCsvContentHandler extends ExportHandler
             }
 
             $row = array_merge($element->toArray(), $propertiesRow);
+
+            if (\Yii::$app->charset != $this->charset)
+            {
+                foreach ($row as $key => $value)
+                {
+                    if (is_string($value))
+                    {
+                        $row[$key] = iconv(\Yii::$app->charset, $this->charset, $value);
+                    }
+                }
+            }
+
 
             fputcsv($fp, $row, ";");
         }
