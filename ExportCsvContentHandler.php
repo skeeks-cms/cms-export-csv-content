@@ -182,18 +182,19 @@ class ExportCsvContentHandler extends ExportHandler
             }
         }
 
+        $this->charset = $this->charset . "//IGNORE";
 
 
         $elements = CmsContentElement::find()->where([
             'content_id' => $this->content_id
-        ])->all();
+        ]);
 
-        $countTotal = count($elements);
+        $countTotal = $elements->count();
         $this->result->stdout("\tЭлементов найдено: {$countTotal}\n");
 
 
 
-        $element = $elements[0];
+        $element = $elements->one();
 
         $fp = fopen($this->rootFilePath, 'w');
 
@@ -202,6 +203,9 @@ class ExportCsvContentHandler extends ExportHandler
         {
             $head[] = "element." . $code;
         }
+
+        $head[] = "element.mainImageSrc";
+
         /**
          * @var $element CmsContentElement
          */
@@ -212,9 +216,46 @@ class ExportCsvContentHandler extends ExportHandler
 
         fputcsv($fp, $head, ";");
 
-        foreach ($elements as $element)
+
+        $head = [];
+
+        foreach ($element->toArray() as $code => $value)
+        {
+            if ($val = iconv(\Yii::$app->charset, $this->charset, $element->getAttributeLabel($code))) {
+                $head[] = $val;
+            } else {
+                $head[] = $element->getAttributeLabel($code);
+            }
+        }
+
+        if ($val = iconv(\Yii::$app->charset, $this->charset, "Ссылка на главное изображение")) {
+            $head[] = $val;
+        } else {
+            $head[] = "Ссылка на главное изображение";
+        }
+
+        /**
+         * @var $element CmsContentElement
+         */
+        foreach ($element->relatedPropertiesModel->toArray() as $code => $value)
+        {
+            $property = $element->relatedPropertiesModel->getRelatedProperty($code);
+
+            if ($val = iconv(\Yii::$app->charset, $this->charset, trim($property->name))) {
+                $head[] = $val;
+            } else {
+                $head[] = $property->name;
+            }
+
+        }
+
+        fputcsv($fp, $head, ";");
+
+        foreach ($elements->each(10) as $element)
         {
             $propertiesRow = [];
+            $propertiesRow[] = $element->image ? $element->image->absoluteSrc : "";
+
             foreach ($element->relatedPropertiesModel->toArray() as $code => $value)
             {
                 $value = $element->relatedPropertiesModel->getSmartAttribute($code);
@@ -226,6 +267,8 @@ class ExportCsvContentHandler extends ExportHandler
                 $propertiesRow[$code] = $value;
             }
 
+
+
             $row = array_merge($element->toArray(), $propertiesRow);
 
             if (\Yii::$app->charset != $this->charset)
@@ -234,11 +277,15 @@ class ExportCsvContentHandler extends ExportHandler
                 {
                     if (is_string($value))
                     {
-                        $row[$key] = iconv(\Yii::$app->charset, $this->charset, $value);
+                        if ($val = iconv(\Yii::$app->charset, $this->charset, $value)) {
+                            $row[$key] = $val;
+                        } else {
+                            $row[$key] = $value;
+                        }
+
                     }
                 }
             }
-
 
             fputcsv($fp, $row, ";");
         }
